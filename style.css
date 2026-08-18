@@ -44,3 +44,15 @@ button:focus-visible{outline:3px solid #222;outline-offset:3px}
 @media (max-width:1000px) and (min-width:851px){.mode-grid.four{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:850px){.mode-grid.four{grid-template-columns:1fr}.online-setup{padding:9px;gap:7px}.name-field{grid-template-columns:88px 1fr}.room-grid{grid-template-columns:repeat(4,1fr);gap:4px}.room-card{padding:7px 5px}.room-card small{display:none}.room-tools{align-items:flex-start}.server-status{padding-top:5px}.online-bar{grid-template-columns:58px 1fr auto;gap:5px;padding:5px;margin-bottom:5px}.online-room{min-width:0}.online-room b{font-size:9px}.online-room span{font-size:7px}.player-strip{gap:3px}.online-player{padding:4px 5px;grid-template-columns:auto 1fr}.online-player span{display:none}.online-player b{font-size:9px}.compact{padding:6px 7px;font-size:9px}.history-row{grid-template-columns:34px 1fr 95px}.result-text{font-size:9px;min-width:62px}.row-result{gap:3px}.text-legend{display:none}}
 @media (max-width:390px){.room-card b{font-size:10px}.room-card span{font-size:9px}.online-bar{grid-template-columns:48px 1fr auto}.history-row{grid-template-columns:29px 1fr 78px}.result-text{min-width:74px}.player-tag{display:none}}
+
+/* v0.4: mobile HIT/BLOW result stays on one line and is easier to read */
+@media (max-width:850px){
+  .history-row{grid-template-columns:34px minmax(0,1fr) 140px}
+  .result-text{font-size:12px;min-width:0;white-space:nowrap;line-height:1;flex:0 0 auto}
+  .row-result{white-space:nowrap;justify-self:end}
+  .player-tag{flex:0 1 42px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+}
+@media (max-width:390px){
+  .history-row{grid-template-columns:29px minmax(0,1fr) 108px}
+  .result-text{font-size:12px;white-space:nowrap}
+}
