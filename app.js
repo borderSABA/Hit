@@ -21,6 +21,7 @@
     clear: $('#clearBtn'), confirm: $('#confirmBtn'), toast: $('#toast'),
     resultOverlay: $('#resultOverlay'), resultTitle: $('#resultTitle'), resultText: $('#resultText'),
     resultKicker: $('#resultKicker'), answerReveal: $('#answerReveal'), rematch: $('#rematchBtn'), backTitle: $('#backTitleBtn'),
+    viewBoard: $('#viewBoardBtn'), returnResult: $('#returnResultBtn'),
     rulesOverlay: $('#rulesOverlay'), closeRules: $('#closeRulesBtn')
   };
 
@@ -41,6 +42,7 @@
   let mySeat = null;
   let reconnectTimer = null;
   let intentionalClose = false;
+  let resultBoardView = false;
   const clientId = getOrCreateClientId();
 
   const modeNames = {solo:'1人で遊ぶ',local2:'2人で遊ぶ',cpu:'CPUと対戦',online:'オンライン対戦'};
@@ -119,6 +121,8 @@
     cpuThinking = false;
     cpuCandidates = makeAllCodes(duplicateAllowed);
     onlineState = null;
+    resultBoardView = false;
+    els.returnResult.classList.add('hidden');
     els.resultOverlay.classList.add('hidden');
     els.setup.classList.remove('active');
     els.game.classList.add('active');
@@ -133,6 +137,8 @@
     if (mode === 'online') disconnectOnline(true);
     gameOver = true;
     cpuThinking = false;
+    resultBoardView = false;
+    els.returnResult.classList.add('hidden');
     els.resultOverlay.classList.add('hidden');
     els.game.classList.remove('active');
     els.setup.classList.add('active');
@@ -143,6 +149,8 @@
 
   function rematch() {
     if (mode === 'online') {
+      resultBoardView = false;
+      els.returnResult.classList.add('hidden');
       els.resultOverlay.classList.add('hidden');
       if (isOnlineHost()) sendOnline({type:'rematch'});
       else showToast('ホストの再戦開始を待っています');
@@ -323,12 +331,12 @@
   function sameCode(a,b){ return a.every((v,i)=>v===b[i]); }
 
   function finish(success, text, title) {
-    gameOver = true; cpuThinking = false; renderSecret(true); renderCurrent(); renderPalette();
+    gameOver = true; resultBoardView = false; els.returnResult.classList.add('hidden'); cpuThinking = false; renderSecret(true); renderCurrent(); renderPalette();
     els.resultKicker.textContent = success ? 'RESULT' : 'ANSWER';
     els.resultTitle.textContent = title;
     els.resultText.textContent = text;
     els.answerReveal.replaceChildren(...answer.map(c=>peg(c)));
-    setTimeout(()=>els.resultOverlay.classList.remove('hidden'), 450);
+    setTimeout(()=>{ if (!resultBoardView) els.resultOverlay.classList.remove('hidden'); }, 450);
   }
 
   function onlineApi(path) {
@@ -451,6 +459,8 @@
         currentGuess = [null,null,null,null]; selectedSlot = 0;
         showToast(last.hits === 4 ? '4 HIT！' : `${last.hits} HIT  ${last.blows} BLOW`);
       } else if (oldPhase !== 'playing' && onlineState.phase === 'playing') {
+        resultBoardView = false;
+        els.returnResult.classList.add('hidden');
         els.resultOverlay.classList.add('hidden');
         currentGuess = [null,null,null,null]; selectedSlot = 0;
         showToast(`${playerNameForSeat(onlineState.turnSeat)}の番`);
@@ -569,7 +579,7 @@
     els.answerReveal.replaceChildren(...(onlineState.answer || []).map(c=>peg(c)));
     els.rematch.textContent = isOnlineHost() ? 'もう一度' : 'ホスト待ち';
     els.rematch.disabled = !isOnlineHost();
-    setTimeout(()=>els.resultOverlay.classList.remove('hidden'), 350);
+    setTimeout(()=>{ if (!resultBoardView) els.resultOverlay.classList.remove('hidden'); }, 350);
   }
 
   function escapeHtml(s) {
@@ -597,6 +607,18 @@
   els.leave.addEventListener('click', backToTitle);
   els.rematch.addEventListener('click', rematch);
   els.backTitle.addEventListener('click', backToTitle);
+  els.viewBoard.addEventListener('click', () => {
+    if (!gameOver) return;
+    resultBoardView = true;
+    els.resultOverlay.classList.add('hidden');
+    els.returnResult.classList.remove('hidden');
+  });
+  els.returnResult.addEventListener('click', () => {
+    if (!gameOver) return;
+    resultBoardView = false;
+    els.returnResult.classList.add('hidden');
+    els.resultOverlay.classList.remove('hidden');
+  });
   els.rules.addEventListener('click',()=>els.rulesOverlay.classList.remove('hidden'));
   els.closeRules.addEventListener('click',()=>els.rulesOverlay.classList.add('hidden'));
   els.rulesOverlay.addEventListener('click',(e)=>{if(e.target===els.rulesOverlay)els.rulesOverlay.classList.add('hidden')});

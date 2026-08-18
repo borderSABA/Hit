@@ -1,4 +1,4 @@
-HIT & BLOW ONLINE v0.2 - GitHub Pages client
+HIT & BLOW ONLINE v0.3 - GitHub Pages client
 
 1. Deploy the Cloudflare Workers server first.
 2. If the Worker URL differs from the default, edit config.js.
@@ -7,3 +7,7 @@ HIT & BLOW ONLINE v0.2 - GitHub Pages client
 
 Default server URL:
 https://hit-and-blow-online.naitoryo7110.workers.dev
+
+
+v0.3 change:
+- Result screen can be hidden to review the final board, then reopened.

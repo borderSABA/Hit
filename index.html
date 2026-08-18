@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <meta name="theme-color" content="#ede8df" />
-  <title>HIT & BLOW ONLINE v0.2</title>
+  <title>HIT & BLOW ONLINE v0.3</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -25,7 +25,7 @@
       <section id="setupScreen" class="screen setup-screen active">
         <div class="setup-card">
           <div class="setup-copy">
-            <div class="chip">v0.2 ONLINE</div>
+            <div class="chip">v0.3 ONLINE</div>
             <h2>4つの色を、順番まで当てる。</h2>
             <p>6色のピンから秘密の4本を推理。ヒットとブローの情報だけを頼りに8手以内で正解を目指します。</p>
           </div>
@@ -138,11 +138,14 @@
         <p id="resultText"></p>
         <div id="answerReveal" class="answer-reveal"></div>
         <div class="result-actions">
+          <button id="viewBoardBtn" class="secondary-btn view-board-btn">盤面を見る</button>
           <button id="backTitleBtn" class="secondary-btn">タイトルへ</button>
           <button id="rematchBtn" class="primary-btn">もう一度</button>
         </div>
       </div>
     </div>
+
+    <button id="returnResultBtn" class="return-result-btn hidden" type="button">リザルトに戻る</button>
 
     <div id="rulesOverlay" class="overlay hidden">
       <div class="rules-card">
