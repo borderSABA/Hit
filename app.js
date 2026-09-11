@@ -4,14 +4,23 @@
   const COLORS = ['red','blue','yellow','green','purple','orange'];
   const COLOR_NAMES = {red:'赤',blue:'青',yellow:'黄',green:'緑',purple:'紫',orange:'橙'};
   const SERVER_URL = (window.HIT_BLOW_SERVER_URL || '').replace(/\/$/, '');
+  const HOME_URL = window.BOARDGAME_HOME_URL || 'https://bordersaba.github.io/';
+  const PLAY_RECORD_URL = window.BOARDGAME_PLAY_RECORD_URL || `${HOME_URL}#play-records`;
+  const COMMON_PLAYER_NAME_KEY = 'boardgamePlayerName';
+  const COMMON_MANAGER_URL = (window.BOARDGAME_HUB_API_URL || 'https://boardgame-hub-api.naitoryo7110.workers.dev').replace(/\/$/, '');
+  const GAME_ID = 'Hit';
+  const GAME_NAME = 'HIT & BLOW';
+  const ACTIVE_ROOM_KEY = 'hitBlowActiveRoom';
+  const ACTIVE_NAME_KEY = 'hitBlowActiveName';
   const ROOM_IDS = ['1','2','3','4'];
 
   const $ = (s) => document.querySelector(s);
   const els = {
     setup: $('#setupScreen'), game: $('#gameScreen'),
+    home: $('#homeBtn'), playRecord: $('#playRecordBtn'),
     modeCards: [...document.querySelectorAll('.mode-card')],
     onlineSetup: $('#onlineSetup'), playerName: $('#playerName'), roomGrid: $('#roomGrid'),
-    refreshRooms: $('#refreshRoomsBtn'), resetRoom: $('#resetRoomBtn'), serverStatus: $('#serverStatus'),
+    refreshRooms: $('#refreshRoomsBtn'), serverStatus: $('#serverStatus'),
     duplicate: $('#duplicateToggle'), duplicateLabel: $('#duplicateLabel'),
     start: $('#startBtn'), newGame: $('#newGameBtn'), rules: $('#rulesBtn'), leave: $('#leaveBtn'),
     modeLabel: $('#modeLabel'), turnLabel: $('#turnLabel'), guessCount: $('#guessCount'),
@@ -43,6 +52,10 @@
   let reconnectTimer = null;
   let intentionalClose = false;
   let resultBoardView = false;
+  let joinRequestedDuplicateAllowed = false;
+  let roomCache = [];
+  let connectionSeq = 0;
+  let lastLocalStartAt = 0;
   const clientId = getOrCreateClientId();
 
   const modeNames = {solo:'1人で遊ぶ',local2:'2人で遊ぶ',cpu:'CPUと対戦',online:'オンライン対戦'};
@@ -103,7 +116,69 @@
     els.modeCards.forEach(c => c.classList.toggle('selected', c.dataset.mode === mode));
     els.onlineSetup.classList.toggle('hidden', mode !== 'online');
     els.start.textContent = mode === 'online' ? '部屋に入る' : 'ゲーム開始';
-    els.resetRoom.disabled = mode !== 'online';
+    updateDuplicateControl();
+  }
+
+  function currentInputName() {
+    return (els.playerName.value || '').trim().slice(0,12);
+  }
+
+  function saveCommonPlayerName(name) {
+    const clean = String(name || '').trim().slice(0,12);
+    if (clean) localStorage.setItem(COMMON_PLAYER_NAME_KEY, clean);
+  }
+
+
+  function localParticipants(playName) {
+    const first = playName || 'PLAYER';
+    if (mode === 'local2') return [first, 'プレイヤー2'];
+    if (mode === 'cpu') return [first, 'CPU'];
+    return [first];
+  }
+
+  function logLocalPlayStart(playName, gameSessionId, startedAt) {
+    if (!COMMON_MANAGER_URL) return;
+    const players = localParticipants(playName);
+    const record = {
+      // Fields currently used by the common HOME API.
+      game: GAME_NAME,
+      room: '',
+      players,
+      mode,
+      // Extra shared-spec fields. They are safe for the current API and ready
+      // for a common API version that persists these fields directly.
+      recordId: gameSessionId,
+      gameSessionId,
+      gameId: GAME_ID,
+      gameName: GAME_NAME,
+      roomId: '',
+      startedAt,
+      participants: players
+    };
+    fetch(`${COMMON_MANAGER_URL}/api/play/start`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(record),
+      keepalive: true
+    }).catch(() => {});
+  }
+
+  function newActionId(prefix='a') {
+    const rand = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    return `${prefix}-${rand}`;
+  }
+
+  function goHome() {
+    location.href = HOME_URL;
+  }
+
+  function goPlayRecords() {
+    location.href = PLAY_RECORD_URL;
+  }
+
+  function updateDuplicateControl() {
+    if (mode !== 'online' || !onlineState) { els.duplicate.disabled = false; return; }
+    els.duplicate.disabled = onlineState.phase !== 'waiting' || !isOnlineHost();
   }
 
   function startGame() {
@@ -111,6 +186,13 @@
       joinOnline();
       return;
     }
+    const now = Date.now();
+    if (now - lastLocalStartAt < 500) return;
+    lastLocalStartAt = now;
+    const playName = currentInputName();
+    if (playName) saveCommonPlayerName(playName);
+    const localSessionId = `${GAME_ID}-local-${crypto.randomUUID ? crypto.randomUUID() : `${now}-${Math.random().toString(16).slice(2)}`}`;
+    logLocalPlayStart(playName, localSessionId, new Date(now).toISOString());
     duplicateAllowed = els.duplicate.checked;
     answer = randomAnswer();
     currentGuess = [null,null,null,null];
@@ -134,7 +216,11 @@
   }
 
   function backToTitle() {
-    if (mode === 'online') disconnectOnline(true);
+    if (mode === 'online') {
+      sessionStorage.removeItem(ACTIVE_ROOM_KEY);
+      sessionStorage.removeItem(ACTIVE_NAME_KEY);
+      disconnectOnline(true);
+    }
     gameOver = true;
     cpuThinking = false;
     resultBoardView = false;
@@ -152,7 +238,7 @@
       resultBoardView = false;
       els.returnResult.classList.add('hidden');
       els.resultOverlay.classList.add('hidden');
-      if (isOnlineHost()) sendOnline({type:'rematch'});
+      if (isOnlineHost()) sendOnline({type:'rematch', actionId:newActionId('rematch')});
       else showToast('ホストの再戦開始を待っています');
       return;
     }
@@ -256,7 +342,7 @@
   function submitHumanGuess() {
     if (!canHumanInput() || currentGuess.some(v=>!v)) return;
     if (mode === 'online') {
-      sendOnline({type:'guess', guess:currentGuess.slice()});
+      sendOnline({type:'guess', guess:currentGuess.slice(), actionId:newActionId('guess')});
       return;
     }
     const actor = mode === 'local2' ? `P${turn+1}` : 'YOU';
@@ -362,9 +448,11 @@
       const res = await fetch(onlineApi('/api/rooms'), {cache:'no-store'});
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      renderRoomGrid(data.rooms || []);
+      roomCache = data.rooms || [];
+      renderRoomGrid(roomCache);
       els.serverStatus.textContent = 'サーバー接続OK';
     } catch (err) {
+      roomCache = [];
       renderRoomGrid([]);
       els.serverStatus.textContent = 'サーバー未接続';
     }
@@ -374,55 +462,94 @@
     els.roomGrid.replaceChildren();
     ROOM_IDS.forEach(id => {
       const info = rooms ? rooms.find(r => String(r.id) === id) : null;
+      const unit = document.createElement('div');
+      unit.className = 'room-unit';
+
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `room-card${selectedRoom===id?' selected':''}`;
-      const count = info ? info.playerCount : 0;
-      const status = loading ? '確認中…' : info ? (info.phase === 'playing' ? '対戦中' : info.phase === 'finished' ? '終了' : count >= 2 ? '満員' : '参加可能') : '---';
-      btn.innerHTML = `<b>ROOM ${id}</b><span>${count}/2人</span><small>${status}</small>`;
+      const count = info ? Number(info.playerCount || 0) : 0;
+      const players = info && Array.isArray(info.players) ? info.players : [];
+      const names = players.length ? players.map(p => `${escapeHtml(p.name)}${p.connected === false ? '（離席）' : ''}`).join(' / ') : '—';
+      const status = loading ? '確認中…' : info ? (info.phase === 'playing' ? 'ゲーム中' : info.phase === 'finished' ? 'ゲーム終了' : '待機中') : '待機中';
+      btn.innerHTML = `<b>ROOM ${id}</b><span>${count} / 2人</span><small class="room-names">参加者：${names}</small><small class="room-status">${status}</small>`;
       btn.addEventListener('click', () => { selectedRoom=id; renderRoomGrid(rooms, loading); });
-      els.roomGrid.appendChild(btn);
+
+      const reset = document.createElement('button');
+      reset.type = 'button';
+      reset.className = 'mini-btn danger room-reset-btn';
+      reset.textContent = '初期化';
+      reset.disabled = loading;
+      reset.addEventListener('click', (e) => { e.stopPropagation(); resetRoom(id); });
+      unit.append(btn, reset);
+      els.roomGrid.appendChild(unit);
     });
   }
 
-  async function resetSelectedRoom() {
-    if (!SERVER_URL || !selectedRoom) return;
-    if (!confirm(`ROOM ${selectedRoom} を初期化しますか？`)) return;
+  async function resetRoom(roomId) {
+    if (!SERVER_URL || !roomId) return;
+    if (!confirm(`ROOM ${roomId} を初期化しますか？\nこのROOMだけがリセットされます。`)) return;
     try {
-      const res = await fetch(onlineApi(`/api/rooms/${selectedRoom}/reset`), {method:'POST'});
+      const res = await fetch(onlineApi(`/api/rooms/${roomId}/reset`), {method:'POST'});
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      showToast(`ROOM ${selectedRoom} を初期化しました`);
+      if (String(selectedRoom) === String(roomId) && els.game.classList.contains('active') && mode === 'online') {
+        sessionStorage.removeItem(ACTIVE_ROOM_KEY);
+        sessionStorage.removeItem(ACTIVE_NAME_KEY);
+      }
+      showToast(`ROOM ${roomId} を初期化しました`);
       await refreshRooms();
     } catch (e) {
       showToast('部屋の初期化に失敗しました');
     }
   }
 
-  function joinOnline() {
-    const name = (els.playerName.value || '').trim().slice(0,12);
+  async function joinOnline(nameOverride=null, roomOverride=null) {
+    const name = (nameOverride != null ? String(nameOverride) : currentInputName()).trim().slice(0,12);
+    if (roomOverride && ROOM_IDS.includes(String(roomOverride))) selectedRoom = String(roomOverride);
     if (!name) { showToast('名前を入力してください'); els.playerName.focus(); return; }
     if (!SERVER_URL) { showToast('SERVER_URL が未設定です'); return; }
-    localStorage.setItem('hitBlowPlayerName', name);
+
+    const seq = ++connectionSeq;
+    joinRequestedDuplicateAllowed = !!els.duplicate.checked;
     clearTimeout(reconnectTimer);
-    if (ws) disconnectOnline(true);
+    if (ws) {
+      const oldSocket = ws;
+      ws = null;
+      try { oldSocket.close(1000, 'reconnect'); } catch {}
+    }
     intentionalClose = false;
     els.start.disabled = true;
     els.start.textContent = '接続中…';
     try {
-      ws = new WebSocket(wsUrl(selectedRoom, name));
+      const checkUrl = new URL(onlineApi(`/api/rooms/${selectedRoom}/join-check`));
+      checkUrl.searchParams.set('name', name);
+      checkUrl.searchParams.set('clientId', clientId);
+      const check = await fetch(checkUrl, {cache:'no-store'});
+      const info = await check.json().catch(()=>({}));
+      if (seq !== connectionSeq) return;
+      if (!check.ok || info.ok === false) {
+        els.start.disabled = false;
+        els.start.textContent = '部屋に入る';
+        showToast(info.message || (check.status === 403 ? '新規ROOMを作成する権限がありません' : 'ROOMへ接続できません'));
+        return;
+      }
+      const socket = new WebSocket(wsUrl(selectedRoom, name));
+      if (seq !== connectionSeq) { try { socket.close(); } catch {} return; }
+      ws = socket;
+      socket.addEventListener('open', () => {
+        if (socket !== ws) return;
+        els.start.disabled = false;
+        els.start.textContent = '部屋に入る';
+      });
+      socket.addEventListener('message', handleOnlineMessage);
+      socket.addEventListener('close', handleOnlineClose);
+      socket.addEventListener('error', () => {});
     } catch (e) {
+      if (seq !== connectionSeq) return;
       els.start.disabled = false;
       els.start.textContent = '部屋に入る';
       showToast('接続URLを確認してください');
-      return;
     }
-    ws.addEventListener('open', () => {
-      els.start.disabled = false;
-      els.start.textContent = '部屋に入る';
-    });
-    ws.addEventListener('message', handleOnlineMessage);
-    ws.addEventListener('close', handleOnlineClose);
-    ws.addEventListener('error', () => {});
   }
 
   function handleOnlineMessage(ev) {
@@ -439,6 +566,12 @@
       els.setup.classList.remove('active'); els.game.classList.add('active');
       els.leave.classList.remove('hidden'); els.onlineBar.classList.remove('hidden');
       els.modeLabel.textContent = 'オンライン対戦';
+      els.playerName.value = (onlineState.players || []).find(p=>p.seat===mySeat)?.name || nameFromActiveSession() || currentInputName();
+      sessionStorage.setItem(ACTIVE_ROOM_KEY, selectedRoom);
+      sessionStorage.setItem(ACTIVE_NAME_KEY, els.playerName.value);
+      if (onlineState.phase === 'waiting' && isOnlineHost() && (onlineState.players || []).length === 1 && joinRequestedDuplicateAllowed !== !!onlineState.duplicateAllowed) {
+        sendOnline({type:'setOptions', duplicateAllowed:joinRequestedDuplicateAllowed, actionId:newActionId('options')});
+      }
       renderAll();
       showToast(`ROOM ${selectedRoom} に参加しました`);
       return;
@@ -459,6 +592,7 @@
         currentGuess = [null,null,null,null]; selectedSlot = 0;
         showToast(last.hits === 4 ? '4 HIT！' : `${last.hits} HIT  ${last.blows} BLOW`);
       } else if (oldPhase !== 'playing' && onlineState.phase === 'playing') {
+        saveCommonPlayerName(playerNameForSeat(mySeat));
         resultBoardView = false;
         els.returnResult.classList.add('hidden');
         els.resultOverlay.classList.add('hidden');
@@ -475,22 +609,43 @@
     }
   }
 
-  function handleOnlineClose() {
+  function handleOnlineClose(ev) {
+    const closingSocket = ev && ev.currentTarget;
+    if (closingSocket && ws && closingSocket !== ws) return;
+    if (closingSocket && !ws) return;
     const wasIntentional = intentionalClose;
+    const roomWasReset = Number(ev && ev.code) === 4000;
     ws = null;
+    if (roomWasReset) {
+      sessionStorage.removeItem(ACTIVE_ROOM_KEY);
+      sessionStorage.removeItem(ACTIVE_NAME_KEY);
+      onlineState = null;
+      mySeat = null;
+      resultBoardView = false;
+      els.resultOverlay.classList.add('hidden');
+      els.returnResult.classList.add('hidden');
+      els.game.classList.remove('active');
+      els.setup.classList.add('active');
+      els.onlineBar.classList.add('hidden');
+      els.leave.classList.add('hidden');
+      showToast('ROOMが初期化されました');
+      refreshRooms();
+      return;
+    }
     if (els.game.classList.contains('active') && mode === 'online') {
       els.connectionText.textContent = '再接続中…';
       renderCurrent(); renderPalette();
       if (!wasIntentional) {
         clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(() => {
-          if (mode === 'online' && els.game.classList.contains('active')) joinOnline();
+          if (mode === 'online' && els.game.classList.contains('active')) joinOnline(nameFromActiveSession(), sessionStorage.getItem(ACTIVE_ROOM_KEY));
         }, 1500);
       }
     }
   }
 
   function disconnectOnline(intentional=true) {
+    ++connectionSeq;
     intentionalClose = intentional;
     clearTimeout(reconnectTimer);
     if (ws) {
@@ -524,6 +679,9 @@
     if (!onlineState) return;
     history = onlineState.history || [];
     duplicateAllowed = !!onlineState.duplicateAllowed;
+    els.duplicate.checked = duplicateAllowed;
+    els.duplicateLabel.textContent = duplicateAllowed ? 'あり' : 'なし';
+    updateDuplicateControl();
     els.onlineRoomName.textContent = `ROOM ${selectedRoom}`;
     els.connectionText.textContent = ws && ws.readyState === WebSocket.OPEN ? '接続中' : '再接続中…';
     renderOnlinePlayers();
@@ -592,15 +750,37 @@
     toastTimer=setTimeout(()=>els.toast.classList.remove('show'),1000);
   }
 
+  function nameFromActiveSession() {
+    return sessionStorage.getItem(ACTIVE_NAME_KEY) || '';
+  }
+
+  function restoreOnlineSession() {
+    const room = sessionStorage.getItem(ACTIVE_ROOM_KEY);
+    const name = sessionStorage.getItem(ACTIVE_NAME_KEY);
+    if (!room || !ROOM_IDS.includes(room) || !name) return false;
+    selectedRoom = room;
+    els.playerName.value = name;
+    setMode('online');
+    joinOnline(name, room);
+    return true;
+  }
+
+  els.home.addEventListener('click', goHome);
+  els.playRecord.addEventListener('click', goPlayRecords);
   els.modeCards.forEach(card => card.addEventListener('click', () => setMode(card.dataset.mode)));
-  els.duplicate.addEventListener('change',()=>els.duplicateLabel.textContent=els.duplicate.checked?'あり':'なし');
+  els.duplicate.addEventListener('change',()=>{
+    els.duplicateLabel.textContent=els.duplicate.checked?'あり':'なし';
+    if (mode === 'online' && onlineState && onlineState.phase === 'waiting' && isOnlineHost()) {
+      sendOnline({type:'setOptions', duplicateAllowed:els.duplicate.checked, actionId:newActionId('options')});
+    }
+  });
   els.start.addEventListener('click', startGame);
   els.confirm.addEventListener('click', submitHumanGuess);
   els.clear.addEventListener('click', clearGuess);
   els.newGame.addEventListener('click',()=>{
     if (!els.game.classList.contains('active')) return;
     if (mode === 'online') {
-      if (isOnlineHost()) sendOnline({type:'resetGame'});
+      if (isOnlineHost()) sendOnline({type:'resetGame', actionId:newActionId('reset-game')});
       else showToast('オンラインではホストのみやり直せます');
     } else startGame();
   });
@@ -623,15 +803,31 @@
   els.closeRules.addEventListener('click',()=>els.rulesOverlay.classList.add('hidden'));
   els.rulesOverlay.addEventListener('click',(e)=>{if(e.target===els.rulesOverlay)els.rulesOverlay.classList.add('hidden')});
   els.refreshRooms.addEventListener('click', refreshRooms);
-  els.resetRoom.addEventListener('click', resetSelectedRoom);
   els.onlineStart.addEventListener('click', () => {
     if (!isOnlineHost()) return;
-    if (onlineState && onlineState.phase === 'finished') sendOnline({type:'rematch'});
-    else sendOnline({type:'start', duplicateAllowed:els.duplicate.checked});
+    if (onlineState && onlineState.phase === 'finished') sendOnline({type:'rematch', actionId:newActionId('rematch')});
+    else sendOnline({type:'start', actionId:newActionId('start')});
   });
 
-  els.playerName.value = localStorage.getItem('hitBlowPlayerName') || '';
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || mode !== 'online') return;
+    if (ws && ws.readyState === WebSocket.OPEN) sendOnline({type:'sync', actionId:newActionId('sync')});
+    else if (sessionStorage.getItem(ACTIVE_ROOM_KEY) && sessionStorage.getItem(ACTIVE_NAME_KEY)) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(() => joinOnline(nameFromActiveSession(), sessionStorage.getItem(ACTIVE_ROOM_KEY)), 100);
+    }
+  });
+  window.addEventListener('pageshow', () => {
+    if (mode === 'online' && els.game.classList.contains('active') && (!ws || ws.readyState > WebSocket.OPEN)) {
+      const room = sessionStorage.getItem(ACTIVE_ROOM_KEY);
+      const name = nameFromActiveSession();
+      if (room && name) joinOnline(name, room);
+    }
+  });
+
+  els.playerName.value = localStorage.getItem(COMMON_PLAYER_NAME_KEY) || '';
   els.duplicateLabel.textContent = 'なし';
   setMode('online');
   refreshRooms();
+  restoreOnlineSession();
 })();

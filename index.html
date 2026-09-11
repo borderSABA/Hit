@@ -4,73 +4,169 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
   <meta name="theme-color" content="#ede8df" />
-  <title>HIT & BLOW ONLINE v0.4</title>
+  <title>HIT &amp; BLOW ONLINE v0.5</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="app" class="app">
-    <header class="topbar">
-      <div class="brand-wrap">
-        <div class="eyebrow">COLOR CODE GAME</div>
+    <header class="topbar common-topbar">
+      <div class="common-left">
+        <button id="homeBtn" class="ghost-btn common-nav-btn" type="button">HOME</button>
+        <button id="playRecordBtn" class="ghost-btn common-nav-btn" type="button">プレイ記録</button>
+      </div>
+      <div class="brand-wrap common-brand">
         <h1>HIT <span>&amp;</span> BLOW</h1>
       </div>
-      <div class="top-actions">
-        <button id="rulesBtn" class="ghost-btn">ルール</button>
-        <button id="leaveBtn" class="ghost-btn hidden">退出</button>
-        <button id="newGameBtn" class="ghost-btn">やり直す</button>
-      </div>
+      <div class="version-badge">v0.5</div>
     </header>
+
     <main class="main">
       <section id="setupScreen" class="screen setup-screen active">
         <div class="setup-card">
           <div class="setup-copy">
-            <div class="chip">v0.4 ONLINE</div>
+            <div class="chip">ONLINE</div>
             <h2>4つの色を、順番まで当てる。</h2>
             <p>6色のピンから秘密の4本を推理。ヒットとブローの情報だけを頼りに8手以内で正解を目指します。</p>
           </div>
-          <div class="mode-grid four">
-            <button class="mode-card" data-mode="solo"><strong>1人で遊ぶ</strong><span>8回以内に秘密の配列を当てる</span></button>
-            <button class="mode-card" data-mode="local2"><strong>2人で遊ぶ</strong><span>同じ端末で交互に推理する</span></button>
-            <button class="mode-card" data-mode="cpu"><strong>CPUと対戦</strong><span>交互に推理して先に4HIT</span></button>
-            <button class="mode-card selected" data-mode="online"><strong>オンライン対戦</strong><span>2人で同じ秘密を交互に推理</span></button>
-          </div>
+
+          <label class="name-field common-name-field">
+            <span>名前</span>
+            <input id="playerName" maxlength="12" autocomplete="nickname" placeholder="名前を入力" />
+          </label>
+
           <div id="onlineSetup" class="online-setup">
-            <label class="name-field"><span>プレイヤー名</span><input id="playerName" maxlength="12" autocomplete="nickname" placeholder="名前を入力" /></label>
-            <div class="room-head"><b>部屋を選択</b><button id="refreshRoomsBtn" class="mini-btn">更新</button></div>
+            <div class="room-head">
+              <b>ROOM選択</b>
+              <button id="refreshRoomsBtn" class="mini-btn" type="button">更新</button>
+            </div>
             <div id="roomGrid" class="room-grid"></div>
-            <div class="room-tools"><div id="serverStatus" class="server-status">サーバー確認中…</div><button id="resetRoomBtn" class="mini-btn danger">選択中の部屋を初期化</button></div>
+            <div id="serverStatus" class="server-status">サーバー確認中…</div>
           </div>
+
+          <div class="setup-section-title">遊び方</div>
+          <div class="mode-grid four">
+            <button class="mode-card" data-mode="solo">
+              <strong>1人で遊ぶ</strong>
+              <span>8回以内に秘密の配列を当てる</span>
+            </button>
+            <button class="mode-card" data-mode="local2">
+              <strong>2人で遊ぶ</strong>
+              <span>同じ端末で交互に推理する</span>
+            </button>
+            <button class="mode-card" data-mode="cpu">
+              <strong>CPUと対戦</strong>
+              <span>交互に推理して先に4HIT</span>
+            </button>
+            <button class="mode-card selected" data-mode="online">
+              <strong>オンライン対戦</strong>
+              <span>2人で同じ秘密を交互に推理</span>
+            </button>
+          </div>
+
           <div class="option-row">
-            <div><b>答えの同色</b><small>同じ色を2本以上使う答えを許可</small></div>
-            <label class="switch"><input id="duplicateToggle" type="checkbox" /><span class="slider"></span><span id="duplicateLabel" class="switch-label">なし</span></label>
+            <div>
+              <b>答えの同色</b>
+              <small>同じ色を2本以上使う答えを許可</small>
+            </div>
+            <label class="switch">
+              <input id="duplicateToggle" type="checkbox" />
+              <span class="slider"></span>
+              <span id="duplicateLabel" class="switch-label">なし</span>
+            </label>
           </div>
+
           <button id="startBtn" class="primary-btn">部屋に入る</button>
         </div>
       </section>
+
       <section id="gameScreen" class="screen game-screen">
+        <div class="game-tools">
+          <button id="rulesBtn" class="ghost-btn" type="button">ルール</button>
+          <button id="leaveBtn" class="ghost-btn hidden" type="button">退出</button>
+          <button id="newGameBtn" class="ghost-btn" type="button">やり直す</button>
+        </div>
         <div class="game-layout">
           <section class="board-panel">
-            <div class="board-head"><div><div id="modeLabel" class="mode-label">オンライン対戦</div><div id="turnLabel" class="turn-label">接続中…</div></div><div class="round-pill"><span id="guessCount">1</span> / 8</div></div>
-            <div id="onlineBar" class="online-bar hidden"><div class="online-room"><b id="onlineRoomName">ROOM 1</b><span id="connectionText">接続中</span></div><div id="playerStrip" class="player-strip"></div><button id="onlineStartBtn" class="primary-btn compact hidden">ゲーム開始</button></div>
-            <div class="secret-row"><div class="secret-label">SECRET</div><div id="secretPegs" class="secret-pegs"></div></div>
+            <div class="board-head">
+              <div>
+                <div id="modeLabel" class="mode-label">オンライン対戦</div>
+                <div id="turnLabel" class="turn-label">接続中…</div>
+              </div>
+              <div class="round-pill"><span id="guessCount">1</span> / 8</div>
+            </div>
+
+            <div id="onlineBar" class="online-bar hidden">
+              <div class="online-room"><b id="onlineRoomName">ROOM 1</b><span id="connectionText">接続中</span></div>
+              <div id="playerStrip" class="player-strip"></div>
+              <button id="onlineStartBtn" class="primary-btn compact hidden">ゲーム開始</button>
+            </div>
+
+            <div class="secret-row">
+              <div class="secret-label">SECRET</div>
+              <div id="secretPegs" class="secret-pegs"></div>
+            </div>
+
             <div id="history" class="history"></div>
           </section>
+
           <aside class="control-panel">
-            <div class="current-box"><div class="control-title">今回の予想</div><div id="currentGuess" class="current-guess"></div><div class="mini-help">空き枠を選び、下の色をタップ</div></div>
+            <div class="current-box">
+              <div class="control-title">今回の予想</div>
+              <div id="currentGuess" class="current-guess"></div>
+              <div class="mini-help">空き枠を選び、下の色をタップ</div>
+            </div>
+
             <div id="palette" class="palette" aria-label="色を選択"></div>
-            <div class="control-actions"><button id="clearBtn" class="secondary-btn">クリア</button><button id="confirmBtn" class="primary-btn" disabled>決定</button></div>
-            <div class="legend text-legend"><div><b>HIT</b><small>色も位置も一致</small></div><div><b>BLOW</b><small>色だけ一致</small></div></div>
+
+            <div class="control-actions">
+              <button id="clearBtn" class="secondary-btn">クリア</button>
+              <button id="confirmBtn" class="primary-btn" disabled>決定</button>
+            </div>
+
+            <div class="legend text-legend">
+              <div><b>HIT</b><small>色も位置も一致</small></div>
+              <div><b>BLOW</b><small>色だけ一致</small></div>
+            </div>
           </aside>
         </div>
       </section>
     </main>
+
     <div id="toast" class="toast" aria-live="polite"></div>
-    <div id="resultOverlay" class="overlay hidden"><div class="result-card"><div id="resultKicker" class="result-kicker">RESULT</div><h2 id="resultTitle">CLEAR!</h2><p id="resultText"></p><div id="answerReveal" class="answer-reveal"></div><div class="result-actions"><button id="viewBoardBtn" class="secondary-btn view-board-btn">盤面を見る</button><button id="backTitleBtn" class="secondary-btn">タイトルへ</button><button id="rematchBtn" class="primary-btn">もう一度</button></div></div></div>
+
+    <div id="resultOverlay" class="overlay hidden">
+      <div class="result-card">
+        <div id="resultKicker" class="result-kicker">RESULT</div>
+        <h2 id="resultTitle">CLEAR!</h2>
+        <p id="resultText"></p>
+        <div id="answerReveal" class="answer-reveal"></div>
+        <div class="result-actions">
+          <button id="viewBoardBtn" class="secondary-btn view-board-btn">盤面を見る</button>
+          <button id="backTitleBtn" class="secondary-btn">タイトルへ</button>
+          <button id="rematchBtn" class="primary-btn">もう一度</button>
+        </div>
+      </div>
+    </div>
+
     <button id="returnResultBtn" class="return-result-btn hidden" type="button">リザルトに戻る</button>
-    <div id="rulesOverlay" class="overlay hidden"><div class="rules-card"><button id="closeRulesBtn" class="close-btn" aria-label="閉じる">×</button><div class="result-kicker">HOW TO PLAY</div><h2>ヒット＆ブロー</h2><p>6色から作られた秘密の4本を、色と順番まで当てる推理ゲームです。</p><div class="rules-list"><div><b>HIT</b><span>色も置かれた位置も合っています。</span></div><div><b>BLOW</b><span>色は使われていますが、位置が違います。</span></div><div><b>8回</b><span>最大8回の予想で4HITを目指します。</span></div><div><b>オンライン</b><span>2人で同じ秘密を交互に推理し、先に4HITした人が勝ちです。</span></div><div><b>同色</b><span>設定ONなら、答えに同じ色が複数入ることがあります。</span></div></div></div></div>
+
+    <div id="rulesOverlay" class="overlay hidden">
+      <div class="rules-card">
+        <button id="closeRulesBtn" class="close-btn" aria-label="閉じる">×</button>
+        <div class="result-kicker">HOW TO PLAY</div>
+        <h2>ヒット＆ブロー</h2>
+        <p>6色から作られた秘密の4本を、色と順番まで当てる推理ゲームです。</p>
+        <div class="rules-list">
+          <div><b>HIT</b><span>色も置かれた位置も合っています。</span></div>
+          <div><b>BLOW</b><span>色は使われていますが、位置が違います。</span></div>
+          <div><b>8回</b><span>最大8回の予想で4HITを目指します。</span></div>
+          <div><b>オンライン</b><span>2人で同じ秘密を交互に推理し、先に4HITした人が勝ちです。</span></div>
+          <div><b>同色</b><span>設定ONなら、答えに同じ色が複数入ることがあります。</span></div>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="config.js"></script>
   <script src="app.js"></script>
-  <script src="hub-integration.js"></script>
 </body>
 </html>
